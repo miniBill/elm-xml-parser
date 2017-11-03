@@ -560,7 +560,7 @@ format xml =
 
 formatProcessingInstruction : ProcessingInstruction -> String
 formatProcessingInstruction processingInstruction =
-    "<?" ++ escape processingInstruction.name ++ " " ++ escape processingInstruction.value ++ "?>"
+    "<?" ++ escape processingInstruction.name ++ " " ++ processingInstruction.value ++ "?>"
 
 
 formatDocType : DocType -> String
