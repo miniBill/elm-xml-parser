@@ -546,7 +546,7 @@ format doc =
 
 formatProcessingInstruction : ProcessingInstruction -> String
 formatProcessingInstruction processingInstruction_ =
-    "<?" ++ escape processingInstruction_.name ++ " " ++ escape processingInstruction_.value ++ "?>"
+    "<?" ++ escape processingInstruction_.name ++ " " ++ processingInstruction_.value ++ "?>"
 
 
 formatDocType : DocType -> String

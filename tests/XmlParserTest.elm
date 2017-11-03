@@ -195,6 +195,13 @@ suite =
                     Nothing
                     (Element "a" [] [])
                 )
+        , test "format 10" <|
+            testFormat
+                (Xml
+                    [ ProcessingInstruction "xml" "version=\"1.0\"" ]
+                    Nothing
+                    (Element "a" [] [])
+                )
         ]
 
 
