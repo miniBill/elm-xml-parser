@@ -58,7 +58,7 @@ type alias ProcessingInstruction =
     }
 
 
-{-| Doc Type Decralation starting with "<!DOCTYPE".
+{-| Doc Type Declaration starting with "<!DOCTYPE".
 
 This contains root element name and rest of details as `DocTypeDefinition`.
 
