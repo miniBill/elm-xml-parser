@@ -28,7 +28,7 @@ import Char
 import Dict exposing (Dict)
 import Hex
 import Parser as Parser
-import Parser.Advanced as Advanced exposing ((|.), (|=), Nestable(..), Step(..), andThen, chompUntil, chompWhile, getChompedString, inContext, int, lazy, loop, map, multiComment, oneOf, problem, succeed, token)
+import Parser.Advanced as Advanced exposing ((|.), (|=), Nestable(..), Step(..), andThen, chompUntil, chompWhile, getChompedString, inContext, lazy, loop, map, oneOf, problem, succeed, token)
 import Set exposing (Set)
 
 
@@ -458,20 +458,6 @@ attributes keys =
                     )
             , succeed []
             ]
-
-
-validateAttributes : Set String -> List Attribute -> Maybe String
-validateAttributes keys attrs =
-    case attrs of
-        [] ->
-            Nothing
-
-        x :: xs ->
-            if Set.member x.name keys then
-                Just x.name
-
-            else
-                validateAttributes (Set.insert x.name keys) xs
 
 
 attribute : Parser Attribute
