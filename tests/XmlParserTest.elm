@@ -1,7 +1,6 @@
 module XmlParserTest exposing (expectDocType, expectFail, expectPI, expectSucceed, suite, testFormat)
 
 import Expect exposing (Expectation)
-import Fuzz exposing (int, list, string)
 import Parser as Parser
 import Parser.Advanced exposing ((|.))
 import Test exposing (..)
@@ -48,7 +47,7 @@ expectFail source =
             Ok ast ->
                 Expect.fail ("Unexpectedly succeeded: " ++ format ast)
 
-            Err e ->
+            Err _ ->
                 Expect.pass
 
 
@@ -62,7 +61,7 @@ testFormat xml =
                         Ok xml2 ->
                             Expect.equal xml xml2
 
-                        Err e ->
+                        Err _ ->
                             Expect.fail ""
                 --(Parser.deadEndsToString e)
                )
@@ -89,6 +88,7 @@ suite =
         , test "attribute key unicode 1" <| expectSucceed """<a あ=""/>""" (Element "a" [ Attribute "あ" "" ] [])
         , test "attribute key unicode 2" <| expectSucceed """<a 😄=""/>""" (Element "a" [ Attribute "😄" "" ] [])
         , test "attribute key surrogate pairs" <| expectSucceed """<a 𩸽=""/>""" (Element "a" [ Attribute "𩸽" "" ] [])
+        , test "attribute key escape (issue #12, 13)" <| expectSucceed """<a attr="a&amp;b"></a>""" (Element "a" [ Attribute "attr" "a&b" ] [])
         , test "attribute key namespace" <| expectSucceed """<a b:c=""/>""" (Element "a" [ Attribute "b:c" "" ] [])
         , test "attribute fail 1" <| expectFail """<a a=/>"""
         , test "attribute fail 2" <| expectFail """<a a"="/>"""
