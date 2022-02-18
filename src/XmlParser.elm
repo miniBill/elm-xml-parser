@@ -327,7 +327,7 @@ textString end_ =
             |> andThen
                 (\s ->
                     oneOf
-                        [ succeed (\c cs -> s++String.cons c cs)
+                        [ succeed (\c cs -> s ++ String.cons c cs)
                             |= escapedChar end_
                             |= lazy (\_ -> textString end_)
                         , succeed s
