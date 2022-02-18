@@ -1,8 +1,6 @@
 XmlParser
 ====
 
-[![Build Status](https://travis-ci.org/jinjor/elm-xml-parser.svg)](https://travis-ci.org/jinjor/elm-xml-parser)
-
 XML Parser for Elm
 
 ## How to use
@@ -24,6 +22,15 @@ Ok { processingInstructions = [], docType = Nothing, root = Element "a" ([{ name
 
 I'm not going to make decoder and encoder right now. Please let me know if you are interested :)
 
-## LICENSE
+## LICENSE & NOTICE
 
 BSD-3-Clause
+
+Originally developed by [jinjor](https://github.com/jinjor) (2017)
+
+This is a fork by [ymtszw](https://github.com/ymtszw) (2022) starting from 2.0.0, aiming:
+
+* to accept pending fixes, and
+* to support (X)HTML (WIP)
+
+Decoder facilities are already available in [elm-xml-decode](https://github.com/ymtszw/elm-xml-decode).

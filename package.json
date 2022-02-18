@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "elm-tooling": ">= 1.7.0"
+  },
+  "scripts": {
+    "postinstall": "elm-tooling install",
+    "test": "elm-test-rs"
+  }
+}
