@@ -1,6 +1,8 @@
 XmlParser
 ====
 
+[![Main Workflow](https://github.com/miniBill/elm-xml-parser/actions/workflows/main.yml/badge.svg)](https://github.com/miniBill/elm-xml-parser/actions/workflows/main.yml)
+
 XML Parser for Elm
 
 ## How to use
