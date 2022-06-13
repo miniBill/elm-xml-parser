@@ -145,6 +145,18 @@ suite =
         , test "cdata 6" <| expectSucceed "<a><![CDATA[b]]>c</a>" (Element "a" [] [ Text "bc" ])
         , test "cdata 7" <| expectSucceed "<a>a<![CDATA[]]>c</a>" (Element "a" [] [ Text "ac" ])
         , test "cdata 8" <| expectSucceed "<a>a<![CDATA[b]]>c</a>" (Element "a" [] [ Text "abc" ])
+        , test "cdata 9" <| expectSucceed "<a><![CDATA[a[b]c]]></a>" (Element "a" [] [ Text "a[b]c" ])
+        , test "cdata 10" <| expectSucceed "<a><![CDATA[[b]c]]></a>" (Element "a" [] [ Text "[b]c" ])
+        , test "cdata 11" <| expectSucceed "<a><![CDATA[a[b]]]></a>" (Element "a" [] [ Text "a[b]" ])
+        , test "cdata 12" <| expectSucceed "<a><![CDATA[a[[b]]c]]></a>" (Element "a" [] [ Text "a[[b]]c" ])
+        , test "cdata 13" <| expectSucceed "<a><![CDATA[ab<![CDATA[cd]]></a>" (Element "a" [] [ Text "ab<![CDATA[cd" ])
+        , test "cdata 14" <| expectSucceed "<a>ab<![CDATA[cd<![CDATA[ef]]>gh]]></a>" (Element "a" [] [ Text "abcd<![CDATA[efgh]]>" ])
+        , test "cdata fail 1" <| expectFail "<a><![CDATA[</a>"
+        , test "cdata fail 2" <| expectFail "<a><![CDATA[]</a>"
+        , test "cdata fail 3" <| expectFail "<a><![CDATA[]]</a>"
+        , test "cdata fail 4" <| expectFail "<a><![CDATA[abc</a>"
+        , test "cdata fail 5" <| expectFail "<a>abc<![CDATA[</a>"
+        , test "cdata fail 6" <| expectFail "<a>abc<![CDATA[def</a>"
         , test "whitespace 1" <| expectSucceed "\u{000D}\n\t <?xml ?>\u{000D}\n\t <!DOCTYPE a []>\u{000D}\n\t <a/>\u{000D}\n\t " (Element "a" [] [])
         , test "whitespace 2" <|
             expectSucceed "<a\u{000D}\n\tb\u{000D}\n\t=\u{000D}\n\t\"c\"\u{000D}\n\td\u{000D}\n\t=\u{000D}\n\t\"e\"/>"

@@ -241,32 +241,8 @@ cdata =
     inContext "cdata" <|
         succeed identity
             |. symbol "<![CDATA["
-            |= cdataContent
-
-
-cdataContent : Parser String
-cdataContent =
-    inContext "cdataContent" <|
-        oneOf
-            [ succeed ""
-                |. symbol "]]>"
-            , symbol "]]"
-                |> andThen
-                    (\_ ->
-                        cdataContent
-                            |> map (\tail -> "]]" ++ tail)
-                    )
-            , symbol "]"
-                |> andThen
-                    (\_ ->
-                        cdataContent
-                            |> map (\tail -> "]" ++ tail)
-                    )
-            , succeed (++)
-                |= keep zeroOrMore (\c -> c /= ']')
-                |= lazy (\_ -> cdataContent)
-            ]
-
+            |= (getChompedString <| chompUntil (toToken "]]>"))
+            |. symbol "]]>"
 
 element : Parser Node
 element =
