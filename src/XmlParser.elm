@@ -1,8 +1,7 @@
 module XmlParser exposing
     ( Xml, ProcessingInstruction, DocType, DocTypeDefinition(..), Node(..), Attribute
-    , parse
+    , parse, DeadEnd
     , format
-    , DeadEnd
     )
 
 {-| The XML Parser.
@@ -15,7 +14,7 @@ module XmlParser exposing
 
 # Parse
 
-@docs parse
+@docs parse, DeadEnd
 
 
 # Format
@@ -99,6 +98,8 @@ type alias Parser a =
     Advanced.Parser String Parser.Problem a
 
 
+{-| A problem when parsing. See the elm/parser documentation for details.
+-}
 type alias DeadEnd =
     Advanced.DeadEnd String Parser.Problem
 
