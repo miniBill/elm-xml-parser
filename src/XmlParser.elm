@@ -27,9 +27,9 @@ module XmlParser exposing
 import Char
 import Dict exposing (Dict)
 import Hex
-import Parser as Parser
-import Parser.Advanced as Advanced exposing ((|.), (|=), Nestable(..), Step(..), andThen, chompUntil, chompWhile, getChompedString, inContext, lazy, loop, map, oneOf, problem, succeed, token)
-import Set exposing (Set)
+import Parser
+import Parser.Advanced as Advanced exposing ((|.), (|=), Step(..), andThen, chompUntil, chompWhile, getChompedString, inContext, lazy, loop, map, oneOf, problem, succeed, token)
+import Set
 
 
 {-| This represents the entire XML structure.
@@ -255,7 +255,7 @@ element =
                         (\startTagName ->
                             succeed (Element startTagName)
                                 |. whiteSpace
-                                |= attributes Set.empty
+                                |= attributes
                                 |. whiteSpace
                                 |= oneOf
                                     [ succeed []
@@ -277,28 +277,29 @@ tagName =
 children : String -> Parser (List Node)
 children startTagName =
     inContext "children" <|
-        oneOf
-            [ succeed []
-                |. closingTag startTagName
-            , textNodeString
-                |> andThen
-                    (\maybeString ->
-                        case maybeString of
-                            Just s ->
-                                succeed (\rest -> Text s :: rest)
-                                    |= children startTagName
+        loop []
+            (\acc ->
+                oneOf
+                    [ succeed (Advanced.Done <| List.reverse acc)
+                        |. closingTag startTagName
+                    , textNodeString
+                        |> andThen
+                            (\maybeString ->
+                                case maybeString of
+                                    Just s ->
+                                        succeed (Advanced.Loop <| Text s :: acc)
 
-                            Nothing ->
-                                succeed []
-                                    |. closingTag startTagName
-                    )
-            , lazy
-                (\_ ->
-                    succeed (::)
-                        |= element
-                        |= children startTagName
-                )
-            ]
+                                    Nothing ->
+                                        succeed (Advanced.Done <| List.reverse acc)
+                                            |. closingTag startTagName
+                            )
+                    , lazy
+                        (\_ ->
+                            succeed (\e -> Advanced.Loop <| e :: acc)
+                                |= element
+                        )
+                    ]
+            )
 
 
 closingTag : String -> Parser ()
@@ -324,65 +325,51 @@ closingTag startTagName =
 textString : Char -> Parser String
 textString end_ =
     inContext "textString" <|
-        (keep zeroOrMore (\c -> c /= end_ && c /= '&')
-            |> andThen
-                (\s ->
-                    oneOf
-                        [ succeed (\c cs -> s ++ String.cons c cs)
-                            |= escapedChar end_
-                            |= lazy (\_ -> textString end_)
-                        , succeed s
-                        ]
-                )
-        )
+        loop []
+            (\acc ->
+                oneOf
+                    [ succeed (\c -> Advanced.Loop <| String.fromChar c :: acc)
+                        |= escapedChar end_
+                    , succeed (\s -> Advanced.Loop <| s :: acc)
+                        |= keep oneOrMore (\c -> c /= end_ && c /= '&')
+                    , succeed (Advanced.Done <| String.concat <| List.reverse acc)
+                    ]
+            )
 
 
 textNodeString : Parser (Maybe String)
 textNodeString =
     inContext "textNodeString" <|
-        oneOf
-            [ succeed
-                (\s maybeString ->
-                    Just (s ++ (maybeString |> Maybe.withDefault ""))
-                )
-                |= keep oneOrMore (\c -> c /= '<' && c /= '&')
-                |= lazy (\_ -> textNodeString)
-            , succeed
-                (\c maybeString ->
-                    Just (String.cons c (maybeString |> Maybe.withDefault ""))
-                )
-                |= escapedChar '<'
-                |= lazy (\_ -> textNodeString)
-            , succeed
-                (\s maybeString ->
-                    let
-                        str =
-                            s ++ (maybeString |> Maybe.withDefault "")
-                    in
-                    if str /= "" then
-                        Just str
+        loop Nothing
+            (\acc ->
+                oneOf
+                    [ succeed
+                        (\c ->
+                            Advanced.Loop <| Just (String.fromChar c :: Maybe.withDefault [] acc)
+                        )
+                        |= escapedChar '<'
+                    , succeed
+                        (\s ->
+                            Advanced.Loop <|
+                                if String.isEmpty s then
+                                    acc
 
-                    else
-                        Nothing
-                )
-                |= cdata
-                |= lazy (\_ -> textNodeString)
-            , succeed
-                (\maybeString ->
-                    let
-                        str =
-                            maybeString |> Maybe.withDefault ""
-                    in
-                    if str /= "" then
-                        Just str
-
-                    else
-                        Nothing
-                )
-                |. comment
-                |= lazy (\_ -> textNodeString)
-            , succeed Nothing
-            ]
+                                else
+                                    Just (s :: Maybe.withDefault [] acc)
+                        )
+                        |= cdata
+                    , succeed (Advanced.Loop acc)
+                        |. comment
+                    , succeed
+                        (\s ->
+                            Advanced.Loop <| Just (s :: Maybe.withDefault [] acc)
+                        )
+                        |= keep oneOrMore (\c -> c /= '<' && c /= '&')
+                    , succeed <|
+                        Advanced.Done <|
+                            Maybe.map (String.concat << List.reverse) acc
+                    ]
+            )
 
 
 escapedChar : Char -> Parser Char
@@ -442,23 +429,27 @@ entities =
         ]
 
 
-attributes : Set String -> Parser (List Attribute)
-attributes keys =
+attributes : Parser (List Attribute)
+attributes =
     inContext "attributes" <|
-        oneOf
-            [ attribute
-                |> andThen
-                    (\attr ->
-                        if Set.member attr.name keys then
-                            fail ("attribute " ++ attr.name ++ " is duplicated")
+        loop ( Set.empty, [] ) <|
+            \( keys, acc ) ->
+                oneOf
+                    [ attribute
+                        |> andThen
+                            (\attr ->
+                                if Set.member attr.name keys then
+                                    fail ("attribute " ++ attr.name ++ " is duplicated")
 
-                        else
-                            succeed ((::) attr)
-                                |. whiteSpace
-                                |= attributes (Set.insert attr.name keys)
-                    )
-            , succeed []
-            ]
+                                else
+                                    succeed
+                                        (Advanced.Loop
+                                            ( Set.insert attr.name keys, attr :: acc )
+                                        )
+                                        |. whiteSpace
+                            )
+                    , succeed <| Advanced.Done <| List.reverse acc
+                    ]
 
 
 attribute : Parser Attribute
@@ -528,16 +519,19 @@ This function does NOT insert line breaks or indents for readability.
 format : Xml -> String
 format doc =
     let
+        pi : String
         pi =
             doc.processingInstructions
                 |> List.map formatProcessingInstruction
-                |> String.join ""
+                |> String.concat
 
+        dt : String
         dt =
             doc.docType
                 |> Maybe.map formatDocType
                 |> Maybe.withDefault ""
 
+        node : String
         node =
             formatNode doc.root
     in
@@ -600,7 +594,7 @@ formatNode node =
 
                     else
                         ">"
-                            ++ (children_ |> List.map formatNode |> String.join "")
+                            ++ (children_ |> List.map formatNode |> String.concat)
                             ++ "</"
                             ++ escape tagName_
                             ++ ">"
@@ -655,7 +649,7 @@ repeat count parser =
                 (\state ->
                     oneOf
                         [ map (\r -> Loop (List.append state [ r ])) parser
-                        , map (always (Done state)) (succeed ())
+                        , map (\_ -> Done state) (succeed ())
                         ]
                 )
                 |> andThen
