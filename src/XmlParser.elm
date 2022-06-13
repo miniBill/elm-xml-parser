@@ -2,6 +2,7 @@ module XmlParser exposing
     ( Xml, ProcessingInstruction, DocType, DocTypeDefinition(..), Node(..), Attribute
     , parse
     , format
+    , DeadEnd
     )
 
 {-| The XML Parser.
