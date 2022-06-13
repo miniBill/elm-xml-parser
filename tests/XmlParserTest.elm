@@ -1,10 +1,10 @@
-module XmlParserTest exposing (expectDocType, expectFail, expectPI, expectSucceed, suite, testFormat)
+module XmlParserTest exposing (suite)
 
 import Expect exposing (Expectation)
-import Parser as Parser
-import Parser.Advanced exposing ((|.))
-import Test exposing (..)
-import XmlParser exposing (..)
+import Parser
+import Parser.Advanced
+import Test exposing (Test, describe, test)
+import XmlParser exposing (Attribute, DocType, DocTypeDefinition(..), Node(..), ProcessingInstruction, Xml)
 
 
 expectPI : String -> List ProcessingInstruction -> (() -> Expectation)
@@ -45,7 +45,7 @@ expectFail source =
     \_ ->
         case XmlParser.parse source of
             Ok ast ->
-                Expect.fail ("Unexpectedly succeeded: " ++ format ast)
+                Expect.fail ("Unexpectedly succeeded: " ++ XmlParser.format ast)
 
             Err _ ->
                 Expect.pass
