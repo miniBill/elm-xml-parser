@@ -23,7 +23,8 @@ module XmlParser exposing
 
 -}
 
-import Common exposing (Parser, attributeName, attributeValue, comment, end, escape, escapedChar, fail, isWhitespace, keep, keyword, maybe, oneOrMore, repeat, symbol, toToken, whiteSpace, whiteSpace1, zeroOrMore)
+import Common exposing (Parser, attributeName, attributeValue, comment, defaultEntities, end, escape, escapedChar, fail, isWhitespace, keep, keyword, maybe, oneOrMore, repeat, symbol, toToken, whiteSpace, whiteSpace1, zeroOrMore)
+import Dict exposing (Dict)
 import DtdParser exposing (DocTypeDefinition(..), Dtd)
 import Parser
 import Parser.Advanced as Advanced exposing ((|.), (|=), Step(..), andThen, chompUntil, getChompedString, inContext, lazy, loop, map, oneOf, succeed)
@@ -132,6 +133,42 @@ xml =
 
         bodyParser : Header -> Parser Xml
         bodyParser { processingInstructions, maybeDocType } =
+            let
+                go : Dtd -> Dict String String
+                go dtd =
+                    dtd
+                        |> List.filterMap
+                            (\d ->
+                                case d of
+                                    DtdParser.Entity k v ->
+                                        Just ( k, v )
+
+                                    DtdParser.Unimplemented _ _ ->
+                                        Nothing
+                            )
+                        |> List.foldl (\( k, v ) -> Dict.insert k v) defaultEntities
+
+                entities : Dict String String
+                entities =
+                    case Maybe.map .definition maybeDocType of
+                        Just (DtdParser.Custom dtd) ->
+                            go dtd
+
+                        Just (DtdParser.Public _ _ (Just dtd)) ->
+                            go dtd
+
+                        Just (DtdParser.System _ (Just dtd)) ->
+                            go dtd
+
+                        Just (Public _ _ Nothing) ->
+                            defaultEntities
+
+                        Just (System _ Nothing) ->
+                            defaultEntities
+
+                        Nothing ->
+                            defaultEntities
+            in
             succeed
                 (\root ->
                     { processingInstructions = processingInstructions
@@ -139,7 +176,7 @@ xml =
                     , root = root
                     }
                 )
-                |= element
+                |= element entities
     in
     inContext "xml"
         (succeed identity
@@ -259,8 +296,8 @@ cdata =
             |. symbol "]]>"
 
 
-element : Parser Node
-element =
+element : Dict String String -> Parser Node
+element entities =
     inContext "element" <|
         succeed identity
             |. symbol "<"
@@ -269,14 +306,14 @@ element =
                         (\startTagName ->
                             succeed (Element startTagName)
                                 |. whiteSpace
-                                |= attributes
+                                |= attributes entities
                                 |. whiteSpace
                                 |= oneOf
                                     [ succeed []
                                         |. symbol "/>"
                                     , succeed identity
                                         |. symbol ">"
-                                        |= lazy (\_ -> children startTagName)
+                                        |= lazy (\_ -> children entities startTagName)
                                     ]
                         )
                )
@@ -288,15 +325,15 @@ tagName =
         keep oneOrMore (\c -> not (isWhitespace c) && c /= '/' && c /= '<' && c /= '>' && c /= '"' && c /= '\'' && c /= '=')
 
 
-children : String -> Parser (List Node)
-children startTagName =
+children : Dict String String -> String -> Parser (List Node)
+children entities startTagName =
     inContext "children" <|
         loop []
             (\acc ->
                 oneOf
                     [ succeed (Advanced.Done <| List.reverse acc)
                         |. closingTag startTagName
-                    , textNodeString
+                    , textNodeString entities
                         |> andThen
                             (\maybeString ->
                                 case maybeString of
@@ -310,7 +347,7 @@ children startTagName =
                     , lazy
                         (\_ ->
                             succeed (\e -> Advanced.Loop <| e :: acc)
-                                |= element
+                                |= element entities
                         )
                     ]
             )
@@ -336,17 +373,17 @@ closingTag startTagName =
             |. symbol ">"
 
 
-textNodeString : Parser (Maybe String)
-textNodeString =
+textNodeString : Dict String String -> Parser (Maybe String)
+textNodeString entities =
     inContext "textNodeString" <|
         loop Nothing
             (\acc ->
                 oneOf
                     [ succeed
                         (\c ->
-                            Advanced.Loop <| Just (String.fromChar c :: Maybe.withDefault [] acc)
+                            Advanced.Loop <| Just (c :: Maybe.withDefault [] acc)
                         )
-                        |= escapedChar '<'
+                        |= escapedChar entities '<'
                     , succeed
                         (\s ->
                             Advanced.Loop <|
@@ -371,13 +408,13 @@ textNodeString =
             )
 
 
-attributes : Parser (List Attribute)
-attributes =
+attributes : Dict String String -> Parser (List Attribute)
+attributes entities =
     inContext "attributes" <|
         loop ( Set.empty, [] ) <|
             \( keys, acc ) ->
                 oneOf
-                    [ attribute
+                    [ attribute entities
                         |> andThen
                             (\attr ->
                                 if Set.member attr.name keys then
@@ -394,15 +431,15 @@ attributes =
                     ]
 
 
-attribute : Parser Attribute
-attribute =
+attribute : Dict String String -> Parser Attribute
+attribute entities =
     inContext "attribute" <|
         succeed Attribute
             |= attributeName
             |. whiteSpace
             |. symbol "="
             |. whiteSpace
-            |= attributeValue
+            |= attributeValue entities
 
 
 

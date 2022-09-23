@@ -23,7 +23,7 @@ module DtdParser exposing
 
 -}
 
-import Common exposing (Parser, attributeName, attributeValue, comment, escape, isWhitespace, keep, keyword, oneOrMore, repeat, symbol, toToken, whiteSpace, whiteSpace1, zeroOrMore)
+import Common exposing (Parser, attributeName, attributeValue, comment, defaultEntities, escape, keyword, repeat, symbol, toToken, whiteSpace, whiteSpace1, zeroOrMore)
 import Parser
 import Parser.Advanced as Advanced exposing ((|.), (|=), Step(..), chompUntil, getChompedString, inContext, oneOf, succeed)
 
@@ -85,7 +85,7 @@ entityParser =
         succeed Entity
             |= attributeName
             |. inContext "spacer" whiteSpace1
-            |= attributeValue
+            |= attributeValue defaultEntities
             |. whiteSpace
 
 

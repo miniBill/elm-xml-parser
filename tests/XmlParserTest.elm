@@ -235,7 +235,7 @@ entitiesTests =
 <root>
     &unc;
 </root>"""
-      , Element "b" [] []
+      , Element "root" [] [ Text "\n    unclassified\n" ]
       )
     ]
         |> List.map

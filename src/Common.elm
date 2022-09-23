@@ -1,7 +1,6 @@
 module Common exposing
     ( Parser, DeadEnd, Count
-    , maybe, zeroOrMore, oneOrMore, repeat, ignore, keep, fail, symbol, keyword, end
-    , attributeName, attributeValue, comment, decodeEscape, escape, escapedChar, isWhitespace, textString, toToken, whiteSpace, whiteSpace1
+    , maybe, zeroOrMore, oneOrMore, repeat, ignore, keep, fail, symbol, keyword, end, attributeName, attributeValue, comment, decodeEscape, escape, escapedChar, isWhitespace, textString, toToken, whiteSpace, whiteSpace1, defaultEntities
     )
 
 {-|
@@ -14,7 +13,7 @@ module Common exposing
 
 # Utils
 
-@docs maybe, zeroOrMore, oneOrMore, repeat, ignore, keep, fail, symbol, keyword, end
+@docs maybe, zeroOrMore, oneOrMore, repeat, ignore, keep, fail, symbol, keyword, end, attributeName, attributeValue, comment, decodeEscape, escape, escapedChar, isWhitespace, textString, toToken, whiteSpace, whiteSpace1, defaultEntities
 
 -}
 
@@ -120,9 +119,9 @@ end =
 escape : String -> String
 escape s =
     List.foldl
-        (\( escaped, original ) -> String.replace (String.fromChar original) ("&" ++ escaped ++ ";"))
+        (\( escaped, original ) -> String.replace original ("&" ++ escaped ++ ";"))
         s
-        (Dict.toList entities)
+        (Dict.toList defaultEntities)
 
 
 whiteSpace : Parser ()
@@ -153,29 +152,29 @@ toToken str =
     Advanced.Token str (Parser.Expecting str)
 
 
-attributeValue : Parser String
-attributeValue =
+attributeValue : Dict String String -> Parser String
+attributeValue entities =
     inContext "attributeValue" <|
         oneOf
             [ succeed identity
                 |. symbol "\""
-                |= textString '"'
+                |= textString entities '"'
                 |. symbol "\""
             , succeed identity
                 |. symbol "'"
-                |= textString '\''
+                |= textString entities '\''
                 |. symbol "'"
             ]
 
 
-textString : Char -> Parser String
-textString end_ =
+textString : Dict String String -> Char -> Parser String
+textString entities end_ =
     inContext "textString" <|
         loop []
             (\acc ->
                 oneOf
-                    [ succeed (\c -> Advanced.Loop <| String.fromChar c :: acc)
-                        |= escapedChar end_
+                    [ succeed (\c -> Advanced.Loop <| c :: acc)
+                        |= escapedChar entities end_
                     , succeed (\s -> Advanced.Loop <| s :: acc)
                         |= keep oneOrMore (\c -> c /= end_ && c /= '&')
                     , succeed (Advanced.Done <| String.concat <| List.reverse acc)
@@ -183,8 +182,8 @@ textString end_ =
             )
 
 
-escapedChar : Char -> Parser Char
-escapedChar end_ =
+escapedChar : Dict String String -> Char -> Parser String
+escapedChar entities end_ =
     inContext "escapedChar" <|
         (succeed identity
             |. symbol "&"
@@ -195,7 +194,7 @@ escapedChar end_ =
                         [ symbol ";"
                             |> andThen
                                 (\_ ->
-                                    case decodeEscape s of
+                                    case decodeEscape entities s of
                                         Ok c ->
                                             succeed c
 
@@ -208,20 +207,20 @@ escapedChar end_ =
         )
 
 
-decodeEscape : String -> Result Parser.Problem Char
-decodeEscape s =
+decodeEscape : Dict String String -> String -> Result Parser.Problem String
+decodeEscape entities s =
     if String.startsWith "#x" s then
         s
             |> String.dropLeft 2
             |> Hex.fromString
-            |> Result.map Char.fromCode
+            |> Result.map (Char.fromCode >> String.fromChar)
             |> Result.mapError Parser.Problem
 
     else if String.startsWith "#" s then
         s
             |> String.dropLeft 1
             |> String.toInt
-            |> Maybe.map Char.fromCode
+            |> Maybe.map (Char.fromCode >> String.fromChar)
             |> Result.fromMaybe (Parser.Problem <| "Invalid escaped charactor: " ++ s)
 
     else
@@ -229,14 +228,14 @@ decodeEscape s =
             |> Result.fromMaybe (Parser.Problem <| "No entity named \"&" ++ s ++ ";\" found.")
 
 
-entities : Dict String Char
-entities =
+defaultEntities : Dict String String
+defaultEntities =
     Dict.fromList
-        [ ( "amp", '&' )
-        , ( "lt", '<' )
-        , ( "gt", '>' )
-        , ( "apos", '\'' )
-        , ( "quot", '"' )
+        [ ( "amp", "&" )
+        , ( "lt", "<" )
+        , ( "gt", ">" )
+        , ( "apos", "'" )
+        , ( "quot", "\"" )
         ]
 
 
