@@ -119,12 +119,10 @@ end =
 
 escape : String -> String
 escape s =
-    s
-        |> String.replace "&" "&amp;"
-        |> String.replace "<" "&lt;"
-        |> String.replace ">" "&gt;"
-        |> String.replace "\"" "&quot;"
-        |> String.replace "'" "&apos;"
+    List.foldl
+        (\( escaped, original ) -> String.replace (String.fromChar original) ("&" ++ escaped ++ ";"))
+        s
+        (Dict.toList entities)
 
 
 whiteSpace : Parser ()
