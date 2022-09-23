@@ -1,10 +1,10 @@
 module XmlParserTest exposing (suite)
 
+import Common exposing (DeadEnd)
+import DtdParser exposing (DocTypeDefinition(..))
 import Expect exposing (Expectation)
-import Parser
-import Parser.Advanced
 import Test exposing (Test, describe, test)
-import XmlParser exposing (Attribute, DocType, DocTypeDefinition(..), Node(..), ProcessingInstruction, Xml)
+import XmlParser exposing (Attribute, DocType, Node(..), ProcessingInstruction, Xml)
 
 
 suite : Test
@@ -21,6 +21,7 @@ suite =
         , whitespaceTests
         , commentTests
         , formatTests
+        , entitiesTests
         ]
 
 
@@ -103,20 +104,20 @@ docTypeTests =
     describe "DocType"
         [ test "public 1" <| expectDocType """<!DOCTYPE a PUBLIC "" ""><a/>""" (Just (DocType "a" (Public "" "" Nothing)))
         , test "public 2" <| expectDocType """<!DOCTYPE a PUBLIC "1" "2"><a/>""" (Just (DocType "a" (Public "1" "2" Nothing)))
-        , test "public 3" <| expectDocType """<!DOCTYPE a PUBLIC "" ""[]><a/>""" (Just (DocType "a" (Public "" "" (Just ""))))
-        , test "public 4" <| expectDocType """<!DOCTYPE a PUBLIC "" ""[a]><a/>""" (Just (DocType "a" (Public "" "" (Just "a"))))
+        , test "public 3" <| expectDocType """<!DOCTYPE a PUBLIC "" ""[]><a/>""" (Just (DocType "a" (Public "" "" (Just []))))
+        , test "public 4" <| expectDocType """<!DOCTYPE a PUBLIC "" ""[<!ENTITY q "quote">]><a/>""" (Just (DocType "a" (Public "" "" (Just [ DtdParser.Entity "q" "quote" ]))))
         , test "public fail 1" <| expectFail """<!DOCTYPE a PUBLIC ""><a/>"""
         , test "public fail 2" <| expectFail """<!DOCTYPE PUBLIC "" ""><a/>"""
         , test "public fail 3" <| expectFail """<!DOCTYPEPUBLIC "" ""><a/>"""
         , test "system 1" <| expectDocType """<!DOCTYPE a SYSTEM ""><a/>""" (Just (DocType "a" (System "" Nothing)))
         , test "system 2" <| expectDocType """<!DOCTYPE a SYSTEM "1"><a/>""" (Just (DocType "a" (System "1" Nothing)))
-        , test "system 3" <| expectDocType """<!DOCTYPE a SYSTEM "" []><a/>""" (Just (DocType "a" (System "" (Just ""))))
-        , test "system 4" <| expectDocType """<!DOCTYPE a SYSTEM "" [a]><a/>""" (Just (DocType "a" (System "" (Just "a"))))
+        , test "system 3" <| expectDocType """<!DOCTYPE a SYSTEM "" []><a/>""" (Just (DocType "a" (System "" (Just []))))
+        , test "system 4" <| expectDocType """<!DOCTYPE a SYSTEM "" [<!ENTITY q "quote">]><a/>""" (Just (DocType "a" (System "" (Just [ DtdParser.Entity "q" "quote" ]))))
         , test "system fail 1" <| expectFail """<!DOCTYPE a SYSTEM []><a/>"""
         , test "system fail 2" <| expectFail """<!DOCTYPE SYSTEM "" []><a/>"""
         , test "system fail 3" <| expectFail """<!DOCTYPESYSTEM "" []><a/>"""
-        , test "custom 1" <| expectDocType """<!DOCTYPE a []><a/>""" (Just (DocType "a" (Custom "")))
-        , test "custom 2" <| expectDocType """<!DOCTYPE a [a]><a/>""" (Just (DocType "a" (Custom "a")))
+        , test "custom 1" <| expectDocType """<!DOCTYPE a []><a/>""" (Just (DocType "a" (Custom [])))
+        , test "custom 2" <| expectDocType """<!DOCTYPE a [<!ENTITY q "quote">]><a/>""" (Just (DocType "a" (Custom [ DtdParser.Entity "q" "quote" ])))
         , test "custom fail 1" <| expectFail """<!DOCTYPE a "" []><a/>"""
         , test "custom fail 2" <| expectFail """<!DOCTYPE []><a/>"""
         , test "whitespace" <| expectDocType "<!DOCTYPE\na\nPUBLIC\n\"\"\n\"\"><a/>" (Just (DocType "a" (Public "" "" Nothing)))
@@ -196,10 +197,10 @@ formatTests =
         , test "2" <| testFormat (Xml [] Nothing <| Element "a" [] [])
         , test "3" <| testFormat (Xml [] Nothing <| Element "😄" [ Attribute "😄" "&><'\"" ] [ Text "&><'\"" ])
         , test "4" <| testFormat (Xml [] (Just (DocType "1" <| Public "a" "b" Nothing)) <| Element "a" [] [])
-        , test "5" <| testFormat (Xml [] (Just (DocType "1" <| Public "a" "b" (Just "c"))) <| Element "a" [] [])
+        , test "5" <| testFormat (Xml [] (Just (DocType "1" <| Public "a" "b" (Just [ DtdParser.Entity "q" "quote" ]))) <| Element "a" [] [])
         , test "6" <| testFormat (Xml [] (Just (DocType "1" <| System "a" Nothing)) <| Element "a" [] [])
-        , test "7" <| testFormat (Xml [] (Just (DocType "1" <| System "a" (Just "b"))) <| Element "a" [] [])
-        , test "8" <| testFormat (Xml [] (Just (DocType "1" <| Custom "")) <| Element "a" [] [])
+        , test "7" <| testFormat (Xml [] (Just (DocType "1" <| System "a" (Just [ DtdParser.Entity "q" "quote" ]))) <| Element "a" [] [])
+        , test "8" <| testFormat (Xml [] (Just (DocType "1" <| Custom [])) <| Element "a" [] [])
         , test "9" <|
             testFormat
                 (Xml
@@ -217,6 +218,31 @@ formatTests =
                     (Element "a" [] [])
                 )
         ]
+
+
+entitiesTests : Test
+entitiesTests =
+    [ ( "Standard"
+      , "<a>&gt;</a>"
+      , Element "a" [] [ Text ">" ]
+      )
+    , ( "Entity in Doctype"
+      , """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+    <!ELEMENT root (#PCDATA)>
+    <!ENTITY unc "unclassified">
+]>
+<root>
+    &unc;
+</root>"""
+      , Element "b" [] []
+      )
+    ]
+        |> List.map
+            (\( label, input, output ) ->
+                test label <| expectSucceed input output
+            )
+        |> describe "Entities"
 
 
 expectPI : String -> List ProcessingInstruction -> (() -> Expectation)
@@ -268,17 +294,24 @@ testFormat xml _ =
                     Ok xml2 ->
                         Expect.equal xml xml2
 
-                    Err _ ->
-                        Expect.fail ""
-            --(Parser.deadEndsToString e)
+                    Err e ->
+                        Expect.fail (deadEndsToString e)
            )
 
 
-deadEndsToString : List (Parser.Advanced.DeadEnd String Parser.Problem) -> String
+deadEndsToString : List DeadEnd -> String
 deadEndsToString deadends =
     String.join " " (List.map deadEndToString deadends)
 
 
-deadEndToString : { row : Int, col : Int, problem : Parser.Problem, contextStack : List { row : Int, col : Int, context : String } } -> String
-deadEndToString { row, col, problem } =
-    "{ row = " ++ String.fromInt row ++ ", col = " ++ String.fromInt col ++ ", " ++ Debug.toString problem ++ "}"
+deadEndToString : DeadEnd -> String
+deadEndToString { row, col, problem, contextStack } =
+    "{ row = "
+        ++ String.fromInt row
+        ++ ", col = "
+        ++ String.fromInt col
+        ++ ", problem = "
+        ++ Debug.toString problem
+        ++ "\n, contextStack =\n    "
+        ++ String.join " > " (List.reverse <| List.map .context contextStack)
+        ++ "\n}"

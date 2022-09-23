@@ -1,5 +1,5 @@
 module XmlParser exposing
-    ( Xml, ProcessingInstruction, DocType, DocTypeDefinition(..), Node(..), Attribute
+    ( Xml, ProcessingInstruction, DocType, DocTypeDefinition, Node(..), Attribute
     , parse, DeadEnd
     , format
     )
@@ -23,11 +23,10 @@ module XmlParser exposing
 
 -}
 
-import Char
-import Dict exposing (Dict)
-import Hex
+import Common exposing (Parser, attributeName, attributeValue, comment, end, escape, escapedChar, fail, isWhitespace, keep, keyword, maybe, oneOrMore, repeat, symbol, toToken, whiteSpace, whiteSpace1, zeroOrMore)
+import DtdParser exposing (DocTypeDefinition(..), Dtd)
 import Parser
-import Parser.Advanced as Advanced exposing ((|.), (|=), Step(..), andThen, chompUntil, chompWhile, getChompedString, inContext, lazy, loop, map, oneOf, problem, succeed, token)
+import Parser.Advanced as Advanced exposing ((|.), (|=), Step(..), andThen, chompUntil, getChompedString, inContext, lazy, loop, map, oneOf, succeed)
 import Set
 
 
@@ -57,6 +56,10 @@ type alias ProcessingInstruction =
     }
 
 
+type alias DocTypeDefinition =
+    DtdParser.DocTypeDefinition
+
+
 {-| Doc Type Declaration starting with "<!DOCTYPE".
 
 This contains root element name and rest of details as `DocTypeDefinition`.
@@ -66,19 +69,6 @@ type alias DocType =
     { rootElementName : String
     , definition : DocTypeDefinition
     }
-
-
-{-| DTD (Doc Type Definition)
-
-  - Public: `<!DOCTYPE root PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">`
-  - System: `<!DOCTYPE root SYSTEM "foo.xml">`
-  - Custom: `<!DOCTYPE root [ <!ELEMENT ...> ]>`
-
--}
-type DocTypeDefinition
-    = Public String String (Maybe String)
-    | System String (Maybe String)
-    | Custom String
 
 
 {-| Node is either a element such as `<a name="value">foo</a>` or text such as `foo`.
@@ -94,18 +84,10 @@ type alias Attribute =
     { name : String, value : String }
 
 
-type alias Parser a =
-    Advanced.Parser String Parser.Problem a
-
-
 {-| A problem when parsing. See the elm/parser documentation for details.
 -}
 type alias DeadEnd =
     Advanced.DeadEnd String Parser.Problem
-
-
-type Count
-    = AtLeast Int
 
 
 {-| Parse XML string.
@@ -122,22 +104,53 @@ parse source =
     Advanced.run xml source
 
 
+type alias Header =
+    { processingInstructions : List ProcessingInstruction
+    , maybeDocType : Maybe DocType
+    }
+
+
 xml : Parser Xml
 xml =
-    inContext "xml" <|
-        succeed Xml
-            |. whiteSpace
-            |= repeat zeroOrMore
-                (succeed identity
-                    |= processingInstruction
-                    |. whiteSpace
+    let
+        headerParser : Parser Header
+        headerParser =
+            succeed
+                (\processingInstructions maybeDocType ->
+                    { processingInstructions = processingInstructions
+                    , maybeDocType = maybeDocType
+                    }
                 )
-            |. repeat zeroOrMore (oneOf [ whiteSpace1, comment ])
-            |= maybe docType
-            |. repeat zeroOrMore (oneOf [ whiteSpace1, comment ])
-            |= element
+                |= repeat zeroOrMore
+                    (succeed identity
+                        |= processingInstruction
+                        |. whiteSpace
+                    )
+                |. repeat zeroOrMore (oneOf [ whiteSpace1, comment ])
+                |= maybe docType
+                |. repeat zeroOrMore (oneOf [ whiteSpace1, comment ])
+
+        bodyParser : Header -> Parser Xml
+        bodyParser { processingInstructions, maybeDocType } =
+            succeed
+                (\root ->
+                    { processingInstructions = processingInstructions
+                    , docType = maybeDocType
+                    , root = root
+                    }
+                )
+                |= element
+    in
+    inContext "xml"
+        (succeed identity
+            |. whiteSpace
+            |= (headerParser
+                    |> andThen
+                        bodyParser
+               )
             |. repeat zeroOrMore (oneOf [ whiteSpace1, comment ])
             |. end
+        )
 
 
 processingInstruction : Parser ProcessingInstruction
@@ -228,12 +241,12 @@ docTypeExternalSubset =
             |. symbol "\""
 
 
-docTypeInternalSubset : Parser String
+docTypeInternalSubset : Parser Dtd
 docTypeInternalSubset =
     inContext "docTypeInternalSubset" <|
         succeed identity
             |. symbol "["
-            |= keep zeroOrMore (\c -> c /= ']')
+            |= DtdParser.parser
             |. symbol "]"
 
 
@@ -323,21 +336,6 @@ closingTag startTagName =
             |. symbol ">"
 
 
-textString : Char -> Parser String
-textString end_ =
-    inContext "textString" <|
-        loop []
-            (\acc ->
-                oneOf
-                    [ succeed (\c -> Advanced.Loop <| String.fromChar c :: acc)
-                        |= escapedChar end_
-                    , succeed (\s -> Advanced.Loop <| s :: acc)
-                        |= keep oneOrMore (\c -> c /= end_ && c /= '&')
-                    , succeed (Advanced.Done <| String.concat <| List.reverse acc)
-                    ]
-            )
-
-
 textNodeString : Parser (Maybe String)
 textNodeString =
     inContext "textNodeString" <|
@@ -373,63 +371,6 @@ textNodeString =
             )
 
 
-escapedChar : Char -> Parser Char
-escapedChar end_ =
-    inContext "escapedChar" <|
-        (succeed identity
-            |. symbol "&"
-            |= keep oneOrMore (\c -> c /= end_ && c /= ';')
-            |> andThen
-                (\s ->
-                    oneOf
-                        [ symbol ";"
-                            |> andThen
-                                (\_ ->
-                                    case decodeEscape s of
-                                        Ok c ->
-                                            succeed c
-
-                                        Err e ->
-                                            problem e
-                                )
-                        , fail ("Entities must end_ with \";\": &" ++ s)
-                        ]
-                )
-        )
-
-
-decodeEscape : String -> Result Parser.Problem Char
-decodeEscape s =
-    if String.startsWith "#x" s then
-        s
-            |> String.dropLeft 2
-            |> Hex.fromString
-            |> Result.map Char.fromCode
-            |> Result.mapError Parser.Problem
-
-    else if String.startsWith "#" s then
-        s
-            |> String.dropLeft 1
-            |> String.toInt
-            |> Maybe.map Char.fromCode
-            |> Result.fromMaybe (Parser.Problem <| "Invalid escaped charactor: " ++ s)
-
-    else
-        Dict.get s entities
-            |> Result.fromMaybe (Parser.Problem <| "No entity named \"&" ++ s ++ ";\" found.")
-
-
-entities : Dict String Char
-entities =
-    Dict.fromList
-        [ ( "amp", '&' )
-        , ( "lt", '<' )
-        , ( "gt", '>' )
-        , ( "apos", '\'' )
-        , ( "quot", '"' )
-        ]
-
-
 attributes : Parser (List Attribute)
 attributes =
     inContext "attributes" <|
@@ -462,50 +403,6 @@ attribute =
             |. symbol "="
             |. whiteSpace
             |= attributeValue
-
-
-attributeName : Parser String
-attributeName =
-    inContext "attributeName" <|
-        keep oneOrMore (\c -> not (isWhitespace c) && c /= '/' && c /= '<' && c /= '>' && c /= '"' && c /= '\'' && c /= '=')
-
-
-attributeValue : Parser String
-attributeValue =
-    inContext "attributeValue" <|
-        oneOf
-            [ succeed identity
-                |. symbol "\""
-                |= textString '"'
-                |. symbol "\""
-            , succeed identity
-                |. symbol "'"
-                |= textString '\''
-                |. symbol "'"
-            ]
-
-
-whiteSpace : Parser ()
-whiteSpace =
-    ignore zeroOrMore isWhitespace
-
-
-whiteSpace1 : Parser ()
-whiteSpace1 =
-    ignore oneOrMore isWhitespace
-
-
-isWhitespace : Char -> Bool
-isWhitespace c =
-    c == ' ' || c == '\u{000D}' || c == '\n' || c == '\t'
-
-
-comment : Parser ()
-comment =
-    succeed ()
-        |. token (toToken "<!--")
-        |. chompUntil (toToken "-->")
-        |. token (toToken "-->")
 
 
 
@@ -560,7 +457,7 @@ formatDocTypeDefinition def =
                 ++ "\""
                 ++ (case maybeInternalSubset of
                         Just internalSubset ->
-                            " [" ++ escape internalSubset ++ "]"
+                            " [" ++ DtdParser.format internalSubset ++ "]"
 
                         Nothing ->
                             ""
@@ -572,14 +469,14 @@ formatDocTypeDefinition def =
                 ++ "\""
                 ++ (case maybeInternalSubset of
                         Just internalSubset ->
-                            " [" ++ escape internalSubset ++ "]"
+                            " [" ++ DtdParser.format internalSubset ++ "]"
 
                         Nothing ->
                             ""
                    )
 
         Custom internalSubset ->
-            "[" ++ escape internalSubset ++ "]"
+            "[" ++ DtdParser.format internalSubset ++ "]"
 
 
 formatNode : Node -> String
@@ -608,101 +505,3 @@ formatNode node =
 formatAttribute : Attribute -> String
 formatAttribute attribute_ =
     escape attribute_.name ++ "=\"" ++ escape attribute_.value ++ "\""
-
-
-escape : String -> String
-escape s =
-    s
-        |> String.replace "&" "&amp;"
-        |> String.replace "<" "&lt;"
-        |> String.replace ">" "&gt;"
-        |> String.replace "\"" "&quot;"
-        |> String.replace "'" "&apos;"
-
-
-
--- UTILITY
-
-
-maybe : Parser a -> Parser (Maybe a)
-maybe parser =
-    oneOf
-        [ map Just parser
-        , succeed Nothing
-        ]
-
-
-zeroOrMore : Count
-zeroOrMore =
-    AtLeast 0
-
-
-oneOrMore : Count
-oneOrMore =
-    AtLeast 1
-
-
-repeat : Count -> Parser a -> Parser (List a)
-repeat count parser =
-    case count of
-        AtLeast n ->
-            loop []
-                (\state ->
-                    oneOf
-                        [ map (\r -> Loop (List.append state [ r ])) parser
-                        , map (\_ -> Done state) (succeed ())
-                        ]
-                )
-                |> andThen
-                    (\results ->
-                        if n <= List.length results then
-                            succeed results
-
-                        else
-                            problem Parser.BadRepeat
-                    )
-
-
-keep : Count -> (Char -> Bool) -> Parser String
-keep count predicate =
-    case count of
-        AtLeast n ->
-            getChompedString (succeed () |. chompWhile predicate)
-                |> andThen
-                    (\str ->
-                        if n <= String.length str then
-                            succeed str
-
-                        else
-                            problem Parser.BadRepeat
-                    )
-
-
-ignore : Count -> (Char -> Bool) -> Parser ()
-ignore count predicate =
-    map (\_ -> ()) (keep count predicate)
-
-
-fail : String -> Parser a
-fail str =
-    problem (Parser.Problem str)
-
-
-symbol : String -> Parser ()
-symbol str =
-    Advanced.symbol (Advanced.Token str (Parser.ExpectingSymbol str))
-
-
-keyword : String -> Parser ()
-keyword kwd =
-    Advanced.keyword (Advanced.Token kwd (Parser.ExpectingKeyword kwd))
-
-
-end : Parser ()
-end =
-    Advanced.end Parser.ExpectingEnd
-
-
-toToken : String -> Advanced.Token Parser.Problem
-toToken str =
-    Advanced.Token str (Parser.Expecting str)
