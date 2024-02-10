@@ -212,20 +212,32 @@ docTypeDefinition =
 
 publicIdentifier : Parser String
 publicIdentifier =
-    inContext "publicIdentifier" <|
-        succeed identity
-            |. symbol "\""
-            |= keep zeroOrMore (\c -> c /= '"')
-            |. symbol "\""
+    inContext "publicIdentifier" quotedString
 
 
 docTypeExternalSubset : Parser String
 docTypeExternalSubset =
-    inContext "docTypeExternalSubset" <|
-        succeed identity
-            |. symbol "\""
-            |= keep zeroOrMore (\c -> c /= '"')
-            |. symbol "\""
+    inContext "docTypeExternalSubset" quotedString
+
+
+quotedString : Parser String
+quotedString =
+    singleOrDoubleQuote
+        |> andThen
+            (\quoteChar ->
+                succeed identity
+                    |= keep zeroOrMore (\c -> c /= quoteChar)
+                    |. symbol (String.fromChar quoteChar)
+            )
+
+
+singleOrDoubleQuote : Parser Char
+singleOrDoubleQuote =
+    inContext "singleOrDoubleQuote" <|
+        oneOf
+            [ succeed '"' |. symbol "\""
+            , succeed '\'' |. symbol "'"
+            ]
 
 
 docTypeInternalSubset : Parser String
