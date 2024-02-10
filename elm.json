@@ -3,7 +3,7 @@
     "name": "miniBill/elm-xml-parser",
     "summary": "XML Parser for Elm - fork of jinjor/elm-xml-parser",
     "license": "BSD-3-Clause",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "XmlParser"
     ],
