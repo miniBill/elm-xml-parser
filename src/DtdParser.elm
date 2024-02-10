@@ -9,7 +9,7 @@ module DtdParser exposing
 
 # Types
 
-@docs Dtd, DocType, DocTypeDefinition, Element
+@docs Dtd, DocTypeDefinition, Element
 
 
 # Parse
@@ -47,11 +47,15 @@ type alias DeadEnd =
     Advanced.DeadEnd String Parser.Problem
 
 
+{-| Parse a DTD element.
+-}
 parse : String -> Result (List DeadEnd) Dtd
 parse =
     Advanced.run parser
 
 
+{-| Parser for a DTD element.
+-}
 parser : Parser Dtd
 parser =
     inContext "dtd" <|
@@ -89,15 +93,21 @@ entityParser =
             |. whiteSpace
 
 
+{-| A DTD is a list of DTD elements.
+-}
 type alias Dtd =
     List Element
 
 
+{-| Only Entities are supported for now.
+-}
 type Element
     = Entity String String
     | Unimplemented String String
 
 
+{-| Format a list of DTD elements.
+-}
 format : Dtd -> String
 format elements =
     String.join "\n" (List.map formatElement elements)

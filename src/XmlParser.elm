@@ -57,6 +57,8 @@ type alias ProcessingInstruction =
     }
 
 
+{-| A Doc Type can be defined inline.
+-}
 type alias DocTypeDefinition =
     DtdParser.DocTypeDefinition
 
