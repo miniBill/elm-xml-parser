@@ -417,7 +417,13 @@ textNodeString entities =
                         |= keep oneOrMore (\c -> c /= '<' && c /= '&')
                     , succeed <|
                         Advanced.Done <|
-                            Maybe.map (String.concat << List.reverse) acc
+                            Maybe.map
+                                (\segments ->
+                                    segments
+                                        |> List.reverse
+                                        |> String.concat
+                                )
+                                acc
                     ]
             )
 

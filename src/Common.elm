@@ -210,22 +210,42 @@ escapedChar entities end_ =
 decodeEscape : Dict String String -> String -> Result Parser.Problem String
 decodeEscape entities s =
     if String.startsWith "#x" s then
-        s
-            |> String.dropLeft 2
-            |> Hex.fromString
-            |> Result.map (Char.fromCode >> String.fromChar)
-            |> Result.mapError Parser.Problem
+        case
+            s
+                |> String.dropLeft 2
+                |> Hex.fromString
+        of
+            Ok code ->
+                code
+                    |> Char.fromCode
+                    |> String.fromChar
+                    |> Ok
+
+            Err e ->
+                Err (Parser.Problem e)
 
     else if String.startsWith "#" s then
-        s
-            |> String.dropLeft 1
-            |> String.toInt
-            |> Maybe.map (Char.fromCode >> String.fromChar)
-            |> Result.fromMaybe (Parser.Problem <| "Invalid escaped charactor: " ++ s)
+        case
+            s
+                |> String.dropLeft 1
+                |> String.toInt
+        of
+            Just code ->
+                code
+                    |> Char.fromCode
+                    |> String.fromChar
+                    |> Ok
+
+            Nothing ->
+                Err (Parser.Problem <| "Invalid escaped charactor: " ++ s)
 
     else
-        Dict.get s entities
-            |> Result.fromMaybe (Parser.Problem <| "No entity named \"&" ++ s ++ ";\" found.")
+        case Dict.get s entities of
+            Just entity ->
+                Ok entity
+
+            Nothing ->
+                Err (Parser.Problem <| "No entity named \"&" ++ s ++ ";\" found.")
 
 
 defaultEntities : Dict String String
