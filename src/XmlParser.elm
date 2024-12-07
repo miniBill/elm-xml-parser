@@ -1,5 +1,5 @@
 module XmlParser exposing
-    ( Xml, ProcessingInstruction, DocType, DocTypeDefinition, Node(..), Attribute
+    ( Xml, ProcessingInstruction, DocType, DocTypeDefinition(..), Node(..), Attribute
     , parse, DeadEnd
     , format
     )
@@ -59,8 +59,10 @@ type alias ProcessingInstruction =
 
 {-| A Doc Type can be defined inline.
 -}
-type alias DocTypeDefinition =
-    DtdParser.DocTypeDefinition
+type DocTypeDefinition
+    = Public String String (Maybe String)
+    | System String (Maybe String)
+    | Custom String
 
 
 {-| Doc Type Declaration starting with "<!DOCTYPE".
@@ -70,7 +72,7 @@ This contains root element name and rest of details as `DocTypeDefinition`.
 -}
 type alias DocType =
     { rootElementName : String
-    , definition : DocTypeDefinition
+    , definition : DtdParser.DocTypeDefinition
     }
 
 
@@ -162,10 +164,10 @@ xml =
                         Just (DtdParser.System _ (Just dtd)) ->
                             go dtd
 
-                        Just (Public _ _ Nothing) ->
+                        Just (DtdParser.Public _ _ Nothing) ->
                             defaultEntities
 
-                        Just (System _ Nothing) ->
+                        Just (DtdParser.System _ Nothing) ->
                             defaultEntities
 
                         Nothing ->
@@ -242,10 +244,19 @@ processingInstructionValue =
             ]
 
 
-docType : Parser DocType
+docType :
+    Parser
+        { rootElementName : String
+        , definition : DtdParser.DocTypeDefinition
+        }
 docType =
     inContext "docType" <|
-        succeed DocType
+        succeed
+            (\rootElementName definition ->
+                { rootElementName = rootElementName
+                , definition = definition
+                }
+            )
             |. symbol "<!DOCTYPE"
             |. whiteSpace
             |= tagName
@@ -255,11 +266,11 @@ docType =
             |. symbol ">"
 
 
-docTypeDefinition : Parser DocTypeDefinition
+docTypeDefinition : Parser DtdParser.DocTypeDefinition
 docTypeDefinition =
     inContext "docTypeDefinition" <|
         oneOf
-            [ succeed Public
+            [ succeed DtdParser.Public
                 |. keyword "PUBLIC"
                 |. whiteSpace
                 |= publicIdentifier
@@ -267,13 +278,13 @@ docTypeDefinition =
                 |= docTypeExternalSubset
                 |. whiteSpace
                 |= maybe docTypeInternalSubset
-            , succeed System
+            , succeed DtdParser.System
                 |. keyword "SYSTEM"
                 |. whiteSpace
                 |= docTypeExternalSubset
                 |. whiteSpace
                 |= maybe docTypeInternalSubset
-            , succeed Custom
+            , succeed DtdParser.Custom
                 |= docTypeInternalSubset
             ]
 
@@ -565,10 +576,10 @@ formatDocType docType_ =
     "<!DOCTYPE " ++ escape docType_.rootElementName ++ " " ++ formatDocTypeDefinition docType_.definition ++ ">"
 
 
-formatDocTypeDefinition : DocTypeDefinition -> String
+formatDocTypeDefinition : DtdParser.DocTypeDefinition -> String
 formatDocTypeDefinition def =
     case def of
-        Public publicIdentifier_ internalSubsetRef maybeInternalSubset ->
+        DtdParser.Public publicIdentifier_ internalSubsetRef maybeInternalSubset ->
             "PUBLIC \""
                 ++ escape publicIdentifier_
                 ++ "\" \""
@@ -582,7 +593,7 @@ formatDocTypeDefinition def =
                             ""
                    )
 
-        System internalSubsetRef maybeInternalSubset ->
+        DtdParser.System internalSubsetRef maybeInternalSubset ->
             "SYSTEM \""
                 ++ escape internalSubsetRef
                 ++ "\""
@@ -594,7 +605,7 @@ formatDocTypeDefinition def =
                             ""
                    )
 
-        Custom internalSubset ->
+        DtdParser.Custom internalSubset ->
             "[" ++ DtdParser.format internalSubset ++ "]"
 
 
