@@ -85,7 +85,7 @@ keep : Count -> (Char -> Bool) -> Parser String
 keep count predicate =
     case count of
         AtLeast n ->
-            getChompedString (succeed () |. chompWhile predicate)
+            getChompedString (chompWhile predicate)
                 |> andThen
                     (\str ->
                         if n <= String.length str then
