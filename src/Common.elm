@@ -237,7 +237,7 @@ decodeEscape entities s =
                     |> Ok
 
             Nothing ->
-                Err (Parser.Problem <| "Invalid escaped charactor: " ++ s)
+                Err (Parser.Problem <| "Invalid escaped character: " ++ s)
 
     else
         case Dict.get s entities of
