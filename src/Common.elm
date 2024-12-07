@@ -131,7 +131,21 @@ whiteSpace =
 
 isWhitespace : Char -> Bool
 isWhitespace c =
-    c == ' ' || c == '\u{000D}' || c == '\n' || c == '\t'
+    case c of
+        ' ' ->
+            True
+
+        '\u{000D}' ->
+            True
+
+        '\n' ->
+            True
+
+        '\t' ->
+            True
+
+        _ ->
+            False
 
 
 whiteSpace1 : Parser ()
@@ -169,6 +183,11 @@ attributeValue entities =
 
 textString : Dict String String -> Char -> Parser String
 textString entities end_ =
+    let
+        endCode : Int
+        endCode =
+            Char.toCode end_
+    in
     inContext "textString" <|
         loop []
             (\acc ->
@@ -176,7 +195,15 @@ textString entities end_ =
                     [ succeed (\c -> Advanced.Loop <| c :: acc)
                         |= escapedChar entities end_
                     , succeed (\s -> Advanced.Loop <| s :: acc)
-                        |= keep oneOrMore (\c -> c /= end_ && c /= '&')
+                        |= keep oneOrMore
+                            (\c ->
+                                case c of
+                                    '&' ->
+                                        False
+
+                                    _ ->
+                                        Char.toCode c - endCode /= 0
+                            )
                     , succeed (Advanced.Done <| String.concat <| List.reverse acc)
                     ]
             )
@@ -184,10 +211,23 @@ textString entities end_ =
 
 escapedChar : Dict String String -> Char -> Parser String
 escapedChar entities end_ =
+    let
+        endCode : Int
+        endCode =
+            Char.toCode end_
+    in
     inContext "escapedChar" <|
         (succeed identity
             |. symbol "&"
-            |= keep oneOrMore (\c -> c /= end_ && c /= ';')
+            |= keep oneOrMore
+                (\c ->
+                    case c of
+                        ';' ->
+                            False
+
+                        _ ->
+                            Char.toCode c - endCode /= 0
+                )
             |> andThen
                 (\s ->
                     oneOf
@@ -262,4 +302,39 @@ defaultEntities =
 attributeName : Parser String
 attributeName =
     inContext "attributeName" <|
-        keep oneOrMore (\c -> not (isWhitespace c) && c /= '/' && c /= '<' && c /= '>' && c /= '"' && c /= '\'' && c /= '=')
+        keep oneOrMore
+            (\c ->
+                case c of
+                    '/' ->
+                        False
+
+                    '<' ->
+                        False
+
+                    '>' ->
+                        False
+
+                    '"' ->
+                        False
+
+                    '\'' ->
+                        False
+
+                    '=' ->
+                        False
+
+                    ' ' ->
+                        False
+
+                    '\u{000D}' ->
+                        False
+
+                    '\n' ->
+                        False
+
+                    '\t' ->
+                        False
+
+                    _ ->
+                        True
+            )

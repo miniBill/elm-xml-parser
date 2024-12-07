@@ -205,7 +205,15 @@ processingInstruction =
 processingInstructionName : Parser String
 processingInstructionName =
     inContext "processingInstructionName" <|
-        keep oneOrMore (\c -> c /= ' ')
+        keep oneOrMore
+            (\c ->
+                case c of
+                    ' ' ->
+                        False
+
+                    _ ->
+                        True
+            )
 
 
 processingInstructionValue : Parser String
@@ -221,7 +229,15 @@ processingInstructionValue =
                             |> map (\tail -> "?" ++ tail)
                     )
             , succeed (++)
-                |= keep zeroOrMore (\c -> c /= '?')
+                |= keep zeroOrMore
+                    (\c ->
+                        case c of
+                            '?' ->
+                                False
+
+                            _ ->
+                                True
+                    )
                 |= lazy (\_ -> processingInstructionValue)
             ]
 
@@ -336,7 +352,42 @@ element entities =
 tagName : Parser String
 tagName =
     inContext "tagName" <|
-        keep oneOrMore (\c -> not (isWhitespace c) && c /= '/' && c /= '<' && c /= '>' && c /= '"' && c /= '\'' && c /= '=')
+        keep oneOrMore
+            (\c ->
+                case c of
+                    '/' ->
+                        False
+
+                    '<' ->
+                        False
+
+                    '>' ->
+                        False
+
+                    '"' ->
+                        False
+
+                    '\'' ->
+                        False
+
+                    '=' ->
+                        False
+
+                    ' ' ->
+                        False
+
+                    '\u{000D}' ->
+                        False
+
+                    '\n' ->
+                        False
+
+                    '\t' ->
+                        False
+
+                    _ ->
+                        True
+            )
 
 
 children : Dict String String -> String -> Parser (List Node)
@@ -414,7 +465,18 @@ textNodeString entities =
                         (\s ->
                             Advanced.Loop <| Just (s :: Maybe.withDefault [] acc)
                         )
-                        |= keep oneOrMore (\c -> c /= '<' && c /= '&')
+                        |= keep oneOrMore
+                            (\c ->
+                                case c of
+                                    '<' ->
+                                        False
+
+                                    '&' ->
+                                        False
+
+                                    _ ->
+                                        True
+                            )
                     , succeed <|
                         Advanced.Done <|
                             Maybe.map
